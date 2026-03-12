@@ -10,6 +10,12 @@ class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
+class ErrorResponse(APIModel):
+    error: str
+    code: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class Citation(BaseModel):
     document_id: str
     file_name: str
@@ -25,41 +31,40 @@ class ToolTrace(BaseModel):
     output: dict[str, Any] = Field(default_factory=dict)
 
 
-class ChatRequest(APIModel):
-    user_id: str
-    session_id: str | None = None
-    kb_id: str | None = None
-    message: str = Field(min_length=1)
-    allow_web: bool = False
-    debug: bool = False
-
-
-class ChatAnswer(APIModel):
-    session_id: str
-    answer: str
-    citations: list[Citation] = Field(default_factory=list)
-    tool_trace: list[ToolTrace] = Field(default_factory=list)
-
-
-class ChatStreamEnvelope(APIModel):
-    event: Literal["token", "tool_call", "retrieval_debug", "final_answer", "error"]
-    data: dict[str, Any]
-
-
-class SessionSummary(APIModel):
+class SessionRecord(APIModel):
     id: str
     user_id: str
     kb_id: str | None = None
     title: str
+    summary: str | None = None
     thread_id: str
+    tags: list[str] = Field(default_factory=list)
+    model_name: str
+    retrieval_mode: Literal["hybrid", "vector", "bm25"]
+    web_search_enabled: bool = False
     last_message_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime
 
 
 class CreateSessionRequest(APIModel):
-    user_id: str
+    user_id: str = Field(min_length=1)
     kb_id: str | None = None
     title: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    model_name: str | None = None
+    retrieval_mode: Literal["hybrid", "vector", "bm25"] | None = None
+    web_search_enabled: bool = False
+
+
+class UpdateSessionRequest(APIModel):
+    user_id: str = Field(min_length=1)
+    kb_id: str | None = None
+    title: str | None = None
+    tags: list[str] | None = None
+    model_name: str | None = None
+    retrieval_mode: Literal["hybrid", "vector", "bm25"] | None = None
+    web_search_enabled: bool | None = None
 
 
 class DocumentUploadResponse(APIModel):
@@ -67,6 +72,8 @@ class DocumentUploadResponse(APIModel):
     kb_id: str
     status: str
     parsed_type: str
+    file_name: str
+    file_type: str
 
 
 class DocumentSummary(APIModel):
@@ -80,6 +87,36 @@ class DocumentSummary(APIModel):
     chunk_count: int
     created_at: datetime
     updated_at: datetime
+
+
+class ChatAttachmentUploadResponse(APIModel):
+    attachment_id: str
+    session_id: str
+    file_name: str
+    file_type: str
+    mime_type: str
+    size_bytes: int
+    status: str
+
+
+class ChatRequest(APIModel):
+    user_id: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    attachment_ids: list[str] = Field(default_factory=list)
+    debug: bool = False
+
+
+class ChatAnswer(APIModel):
+    session_id: str
+    answer: str
+    citations: list[Citation] = Field(default_factory=list)
+    tool_trace: list[ToolTrace] = Field(default_factory=list)
+
+
+class ChatStreamEnvelope(APIModel):
+    event: Literal["token", "tool_call", "retrieval_debug", "final_answer", "error"]
+    data: dict[str, Any]
 
 
 class MemoryRecord(APIModel):

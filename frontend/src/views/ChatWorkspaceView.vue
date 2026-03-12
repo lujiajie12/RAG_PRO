@@ -15,9 +15,9 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const store = useWorkspaceStore();
 
 const modelOptions = [
-  { label: "gpt-4.1-mini", value: "gpt-4.1-mini" },
-  { label: "gpt-4.1", value: "gpt-4.1" },
-  { label: "deepseek-chat", value: "deepseek-chat" },
+  { label: "qwen-plus", value: "qwen-plus" },
+  { label: "qwen-max", value: "qwen-max" },
+  { label: "qwen-turbo", value: "qwen-turbo" },
 ];
 
 const retrievalOptions = [
@@ -38,7 +38,7 @@ const retrievalOptions = [
           <h2>{{ store.currentSession.title }}</h2>
         </div>
         <div class="toolbar-controls">
-          <n-select :options="modelOptions" value="gpt-4.1-mini" class="toolbar-select" />
+          <n-select :options="modelOptions" value="qwen-plus" class="toolbar-select" />
           <n-select :options="retrievalOptions" value="hybrid" class="toolbar-select" />
           <div class="toolbar-switch">
             <span>Web Search</span>

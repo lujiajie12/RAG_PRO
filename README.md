@@ -139,14 +139,21 @@ Copy-Item .env.example .env
 
 - `APP_PORT=5001`
 - `CORS_ORIGINS=http://localhost:5173`
-- `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/contextpilot`
+- `POSTGRES_HOST=localhost`
+- `POSTGRES_PORT=5432`
+- `POSTGRES_DB=contextpilot`
+- `POSTGRES_USER=postgres`
+- `POSTGRES_PASSWORD=postgres`
 - `MINIO_ENDPOINT=localhost:9000`
+- `OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
 - `OPENAI_API_KEY=replace-me`
+- `CHAT_MODEL=qwen-plus`
+- `EMBEDDING_MODEL=text-embedding-v4`
 
 说明：
 
 - 当前骨架阶段，即使 `OPENAI_API_KEY` 还是占位值，前端页面和多数后端接口也能先跑起来
-- 等你把真实 LLM / RAG 逻辑接上后，再把 `OPENAI_API_KEY` 换成可用值即可
+- 如果你接阿里百炼真实模型，这里填百炼 API Key 即可
 
 ### 3. 启动基础设施
 

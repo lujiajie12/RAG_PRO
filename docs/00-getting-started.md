@@ -43,17 +43,22 @@ Copy-Item .env.example .env
 | `APP_HOST` | `0.0.0.0` | 后端监听地址 |
 | `APP_PORT` | `5001` | 后端端口 |
 | `CORS_ORIGINS` | `http://localhost:5173` | 前端开发地址 |
-| `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5432/contextpilot` | 本地数据库 |
+| `POSTGRES_HOST` | `localhost` | PostgreSQL 主机 |
+| `POSTGRES_PORT` | `5432` | PostgreSQL 端口 |
+| `POSTGRES_DB` | `contextpilot` | PostgreSQL 数据库名 |
+| `POSTGRES_USER` | `postgres` | PostgreSQL 用户名 |
+| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL 密码 |
 | `MINIO_ENDPOINT` | `localhost:9000` | MinIO API 地址 |
 | `MINIO_BUCKET` | `knowledge-files` | 默认桶名 |
-| `OPENAI_API_KEY` | `replace-me` | 当前可先占位，后续接真实模型时再替换 |
-| `CHAT_MODEL` | `gpt-4.1-mini` | 预留的聊天模型名 |
-| `EMBEDDING_MODEL` | `text-embedding-3-large` | 预留的 embedding 模型名 |
+| `OPENAI_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 阿里百炼 OpenAI 兼容地址 |
+| `OPENAI_API_KEY` | `replace-me` | 阿里百炼 API Key，可先占位 |
+| `CHAT_MODEL` | `qwen-plus` | 默认聊天模型 |
+| `EMBEDDING_MODEL` | `text-embedding-v4` | 默认 embedding 模型 |
 
 说明：
 
 - 目前仓库仍然是工程骨架阶段，所以 `OPENAI_API_KEY` 不是立即阻塞项
-- 但如果你后续要接真实 LLM / embedding，建议现在就填好
+- 但如果你后续要接真实阿里百炼 LLM / embedding，建议现在就填好
 
 ## 4. 启动 PostgreSQL 和 MinIO
 

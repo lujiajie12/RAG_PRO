@@ -1,20 +1,25 @@
-from .orm import ConversationSession, Document, DocumentChunk, Memory, Message, RetrievalLog, User
+from .orm import ChatAttachment, ConversationSession, Document, DocumentChunk, Memory, Message, RetrievalLog, SessionTag, User
 from .schemas import (
     ChatAnswer,
+    ChatAttachmentUploadResponse,
     ChatRequest,
     ChatStreamEnvelope,
     CreateMemoryRequest,
     CreateSessionRequest,
     DocumentSummary,
     DocumentUploadResponse,
+    ErrorResponse,
     MemoryRecord,
     RetrievalDebugRequest,
     RetrievalDebugResponse,
-    SessionSummary,
+    SessionRecord,
+    UpdateSessionRequest,
 )
 
 __all__ = [
     "ChatAnswer",
+    "ChatAttachment",
+    "ChatAttachmentUploadResponse",
     "ChatRequest",
     "ChatStreamEnvelope",
     "ConversationSession",
@@ -24,12 +29,15 @@ __all__ = [
     "DocumentChunk",
     "DocumentSummary",
     "DocumentUploadResponse",
+    "ErrorResponse",
     "Memory",
     "MemoryRecord",
     "Message",
     "RetrievalDebugRequest",
     "RetrievalDebugResponse",
     "RetrievalLog",
-    "SessionSummary",
+    "SessionRecord",
+    "SessionTag",
+    "UpdateSessionRequest",
     "User",
 ]

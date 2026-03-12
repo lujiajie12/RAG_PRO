@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
@@ -38,10 +38,34 @@ class ConversationSession(TimestampMixin, db.Model):
     user_id: Mapped[str] = mapped_column(String(128), index=True)
     kb_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(160), default="New conversation")
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    model_name: Mapped[str] = mapped_column(String(64), default="qwen-plus")
+    retrieval_mode: Mapped[str] = mapped_column(String(32), default="hybrid")
+    web_search_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     messages: Mapped[list["Message"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    tags: Mapped[list["SessionTag"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    attachments: Mapped[list["ChatAttachment"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def tag_names(self) -> list[str]:
+        return [item.tag for item in self.tags]
+
+
+class SessionTag(TimestampMixin, db.Model):
+    __tablename__ = "session_tags"
+    __table_args__ = (UniqueConstraint("session_id", "tag", name="uq_session_tags_session_tag"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    tag: Mapped[str] = mapped_column(String(64), index=True)
+
+    session: Mapped["ConversationSession"] = relationship(back_populates="tags")
 
 
 class Message(TimestampMixin, db.Model):
@@ -56,6 +80,25 @@ class Message(TimestampMixin, db.Model):
     tool_trace: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
 
     session: Mapped["ConversationSession"] = relationship(back_populates="messages")
+    attachments: Mapped[list["ChatAttachment"]] = relationship(back_populates="message")
+
+
+class ChatAttachment(TimestampMixin, db.Model):
+    __tablename__ = "chat_attachments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String(128), index=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    file_type: Mapped[str] = mapped_column(String(32))
+    mime_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column(default=0)
+    storage_key: Mapped[str] = mapped_column(String(255), unique=True)
+    status: Mapped[str] = mapped_column(String(32), default="uploaded")
+
+    session: Mapped["ConversationSession"] = relationship(back_populates="attachments")
+    message: Mapped["Message | None"] = relationship(back_populates="attachments")
 
 
 class Document(TimestampMixin, db.Model):
