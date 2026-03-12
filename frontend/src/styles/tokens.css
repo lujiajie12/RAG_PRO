@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --cp-bg: #eef3f4;
+  --cp-bg-strong: #e3eaee;
+  --cp-surface: rgba(255, 255, 255, 0.76);
+  --cp-surface-strong: rgba(255, 255, 255, 0.92);
+  --cp-border: rgba(66, 84, 108, 0.14);
+  --cp-border-strong: rgba(48, 70, 92, 0.2);
+  --cp-text: #152433;
+  --cp-text-muted: #617487;
+  --cp-text-soft: #7d8da0;
+  --cp-accent: #0f766e;
+  --cp-accent-soft: rgba(15, 118, 110, 0.12);
+  --cp-secondary: #335cff;
+  --cp-success: #1d8f6d;
+  --cp-warning: #d97706;
+  --cp-danger: #db4f5f;
+  --cp-shadow: 0 20px 60px rgba(30, 57, 86, 0.09);
+  --cp-grid: linear-gradient(rgba(108, 128, 147, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(108, 128, 147, 0.08) 1px, transparent 1px);
+}
