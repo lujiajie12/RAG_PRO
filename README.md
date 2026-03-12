@@ -122,7 +122,7 @@ RAG_PRO/
 
 建议本地安装这些工具：
 
-- `Python 3.11` 或更高
+- `Conda` / `Miniconda`
 - `Node.js 20` 或更高
 - `npm 10` 或更高
 - `Docker Desktop` 或可用的 Docker Engine
@@ -162,16 +162,22 @@ docker compose -f infra/docker/docker-compose.yml up -d
 - MinIO API: `localhost:9000`
 - MinIO Console: `http://localhost:9001`
 
-### 4. 安装后端依赖
+### 4. 创建 Conda 环境并安装后端依赖
 
-建议在项目根目录创建虚拟环境：
+在项目根目录执行：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+conda create -n rag_pro python=3.11 -y
+conda activate rag_pro
 python -m pip install --upgrade pip
-python -m pip install -e ".\backend[dev]"
+python -m pip install -r requirements.txt
 ```
+
+说明：
+
+- 这会创建一个名为 `rag_pro` 的 Conda 虚拟环境
+- `requirements.txt` 已经整理好了当前后端运行和开发需要的 Python 依赖
+- 前端依赖仍然单独通过 `npm install` 安装
 
 ### 5. 初始化数据库
 

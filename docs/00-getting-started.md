@@ -6,7 +6,7 @@
 
 建议本地准备：
 
-- `Python 3.11+`
+- `Conda` / `Miniconda`
 - `Node.js 20+`
 - `npm 10+`
 - `Docker Desktop` 或可用的 Docker Engine
@@ -89,15 +89,15 @@ docker compose -f infra/docker/docker-compose.yml down -v
 
 注意：`down -v` 会删除本地容器卷数据。
 
-## 5. 安装后端依赖
+## 5. 创建 Conda 环境并安装后端依赖
 
 在仓库根目录执行：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+conda create -n rag_pro python=3.11 -y
+conda activate rag_pro
 python -m pip install --upgrade pip
-python -m pip install -e ".\backend[dev]"
+python -m pip install -r requirements.txt
 ```
 
 安装完成后，你会拿到这些核心依赖：
@@ -112,6 +112,12 @@ python -m pip install -e ".\backend[dev]"
 - langgraph
 - pytest
 - ruff
+
+补充说明：
+
+- 这里的 `requirements.txt` 位于仓库根目录
+- 它和 `backend/pyproject.toml` 保持同一套依赖范围
+- 如果你的 PowerShell 里 `conda activate` 不生效，先执行一次 `conda init powershell`，然后重开终端
 
 ## 6. 初始化数据库
 
