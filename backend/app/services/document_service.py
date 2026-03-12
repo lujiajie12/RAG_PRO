@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from werkzeug.datastructures import FileStorage
 
 from ..models.orm import Document
@@ -21,7 +23,7 @@ class DocumentService:
             kb_id=kb_id,
             file_name=file.filename or "untitled",
             file_type=file_type,
-            storage_key=f"{kb_id}/{file.filename}",
+            storage_key=f"{kb_id}/{uuid4().hex}-{file.filename or 'untitled'}",
             status="uploaded",
             parsed_type=file_type,
         )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from ..models.orm import ConversationSession
 from ..models.schemas import CreateSessionRequest, SessionSummary
 from ..repos.sessions import SessionRepository
@@ -18,6 +20,6 @@ class SessionService:
             user_id=payload.user_id,
             kb_id=payload.kb_id,
             title=payload.title or "New conversation",
-            thread_id=f"{payload.user_id}:{payload.kb_id or 'general'}",
+            thread_id=f"thread-{uuid4().hex}",
         )
         return SessionSummary.model_validate(self.repo.create(session))

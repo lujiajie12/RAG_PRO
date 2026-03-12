@@ -1,0 +1,4 @@
+interface:
+  display_name: "ContextPilot Dev Conventions"
+  short_description: "Repo rules for ContextPilot development"
+  default_prompt: "Use $rag-pro-dev-conventions to modify ContextPilot while keeping the frontend, backend, and LLM contracts aligned."
