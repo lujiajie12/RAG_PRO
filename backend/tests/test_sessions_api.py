@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 from app.extensions import db
-from app.models.orm import ConversationSession, SessionTag
+from app.models.orm import ConversationSession, Message, SessionTag
 
 
 def _seed_session(
@@ -146,3 +146,55 @@ def test_patch_session_updates_partial_fields(client, app, test_user_id):
     assert payload["model_name"] == "qwen-turbo"
     assert payload["retrieval_mode"] == "bm25"
     assert payload["web_search_enabled"] is True
+
+
+def test_list_messages_returns_citations_and_tool_trace(client, app, test_user_id):
+    with app.app_context():
+        session = _seed_session(
+            test_user_id,
+            title="Conversation",
+            kb_id="kb-history",
+        )
+        session_id = session.id
+        db.session.add_all(
+            [
+                Message(
+                    session_id=session_id,
+                    user_id=test_user_id,
+                    role="user",
+                    content="Explain hybrid retrieval",
+                ),
+                Message(
+                    session_id=session_id,
+                    user_id=test_user_id,
+                    role="assistant",
+                    content="Hybrid retrieval combines dense and sparse recall.",
+                    citations=[
+                        {
+                            "document_id": "doc-1",
+                            "file_name": "retrieval.txt",
+                            "page": 2,
+                            "chunk_id": "chunk-1",
+                            "rerank_score": 0.91,
+                        }
+                    ],
+                    tool_trace=[
+                        {
+                            "name": "rag_search",
+                            "status": "completed",
+                            "input": {"query": "Explain hybrid retrieval"},
+                            "output": {"final_context": 3},
+                        }
+                    ],
+                ),
+            ]
+        )
+        db.session.commit()
+
+    response = client.get(f"/api/sessions/{session_id}/messages?user_id={test_user_id}")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert [item["role"] for item in payload] == ["user", "assistant"]
+    assert payload[1]["citations"][0]["file_name"] == "retrieval.txt"
+    assert payload[1]["tool_trace"][0]["name"] == "rag_search"

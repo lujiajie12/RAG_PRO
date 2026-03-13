@@ -1,40 +1,50 @@
 <script setup lang="ts">
 import { NTag } from "naive-ui";
 
-import type { MessageItem } from "@/types";
+import type { MessageItem, ToolTraceItem } from "@/types";
 
 defineProps<{
   message: MessageItem;
 }>();
+
+function formatTraceStatus(status: ToolTraceItem["status"]): string {
+  const labels = {
+    planned: "待执行",
+    running: "执行中",
+    completed: "已完成",
+    failed: "失败",
+  };
+  return labels[status];
+}
 </script>
 
 <template>
   <article class="message-row" :class="message.role">
-    <div class="avatar">{{ message.role === "assistant" ? "AI" : "ME" }}</div>
-    <div class="bubble glass-card" :class="message.role">
+    <div class="avatar">{{ message.role === "assistant" ? "AI" : "我" }}</div>
+    <div class="bubble glass-card" :class="[message.role, { failed: message.failed }]">
       <div class="bubble-meta">
-        <strong>{{ message.role === "assistant" ? "ContextPilot" : "You" }}</strong>
-        <span>{{ message.timestamp }}</span>
+        <strong>{{ message.role === "assistant" ? "ContextPilot" : "你" }}</strong>
+        <span>{{ message.streaming ? "正在生成..." : message.timestamp }}</span>
       </div>
       <p>{{ message.content }}</p>
 
-      <div v-if="message.citations?.length" class="citation-list">
+      <div v-if="message.citations.length" class="citation-list">
         <n-tag
           v-for="citation in message.citations"
-          :key="`${citation.fileName}-${citation.page}`"
+          :key="`${citation.fileName}-${citation.page ?? 'na'}-${citation.chunkId}`"
           round
           size="small"
           :bordered="false"
         >
-          {{ citation.fileName }} · p{{ citation.page }} · {{ citation.rerankScore }}
+          {{ citation.fileName }} · 第{{ citation.page ?? "-" }}页 · {{ citation.rerankScore?.toFixed(3) ?? "-" }}
         </n-tag>
       </div>
 
-      <div v-if="message.toolTrace?.length" class="tool-list">
-        <div v-for="tool in message.toolTrace" :key="tool.name" class="tool-card">
+      <div v-if="message.toolTrace.length" class="tool-list">
+        <div v-for="tool in message.toolTrace" :key="`${tool.name}-${tool.summary}`" class="tool-card">
           <div>
             <strong>{{ tool.name }}</strong>
-            <small>{{ tool.status }}</small>
+            <small>{{ formatTraceStatus(tool.status) }}</small>
           </div>
           <p>{{ tool.summary }}</p>
         </div>
@@ -80,6 +90,11 @@ defineProps<{
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(237, 247, 246, 0.82));
 }
 
+.bubble.failed {
+  border: 1px solid rgba(220, 38, 38, 0.24);
+  background: linear-gradient(180deg, rgba(255, 245, 245, 0.92), rgba(255, 255, 255, 0.88));
+}
+
 .bubble-meta {
   display: flex;
   align-items: center;
@@ -123,7 +138,6 @@ defineProps<{
 
 .tool-card small {
   color: var(--cp-accent);
-  text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 

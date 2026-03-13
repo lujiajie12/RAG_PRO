@@ -73,6 +73,16 @@ def test_upload_document_accepts_supported_type(client, app, monkeypatch, test_u
         assert len(stored_chunks) == 2
         assert {chunk.chunk_type for chunk in stored_chunks} == {"parent", "child"}
 
+    listed = client.get(f"/api/documents?user_id={test_user_id}&kb_id=kb-docs")
+
+    assert listed.status_code == 200
+    listed_payload = listed.get_json()
+    assert listed_payload[0]["parent_count"] == 1
+    assert listed_payload[0]["child_count"] == 1
+    assert listed_payload[0]["embedding_status"] == "ready"
+    assert listed_payload[0]["bm25_status"] == "ready"
+    assert listed_payload[0]["indexed_at"]
+
 
 def test_upload_document_rejects_unsupported_type(client, test_user_id):
     response = client.post(

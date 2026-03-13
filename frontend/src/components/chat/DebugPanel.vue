@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NButton, NTabPane, NTabs, NTag } from "naive-ui";
+import { NButton, NEmpty, NTabPane, NTabs, NTag } from "naive-ui";
 
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const store = useWorkspaceStore();
-
 const sections = computed(() => store.retrievalSections);
 </script>
 
@@ -13,8 +12,8 @@ const sections = computed(() => store.retrievalSections);
   <section class="debug-panel glass-card" :class="{ collapsed: store.debugPanelCollapsed }">
     <div class="debug-head">
       <div>
-        <p class="section-title">Retrieval Debug</p>
-        <h3>检索与上下文调试</h3>
+        <p class="section-title">检索调试</p>
+        <h3>检索链路与上下文装配</h3>
       </div>
       <n-button quaternary size="small" @click="store.debugPanelCollapsed = !store.debugPanelCollapsed">
         {{ store.debugPanelCollapsed ? "展开" : "收起" }}
@@ -22,7 +21,7 @@ const sections = computed(() => store.retrievalSections);
     </div>
 
     <div v-if="!store.debugPanelCollapsed" class="debug-body">
-      <n-tabs v-model:value="store.activeRetrievalTab" type="segment">
+      <n-tabs v-if="sections.length" v-model:value="store.activeRetrievalTab" type="segment">
         <n-tab-pane
           v-for="section in sections"
           :key="section.key"
@@ -42,13 +41,15 @@ const sections = computed(() => store.retrievalSections);
               </div>
               <p>{{ hit.preview }}</p>
               <div class="hit-score">
-                <span>score</span>
+                <span>相关分数</span>
                 <strong class="mono">{{ hit.score }}</strong>
               </div>
             </article>
           </div>
         </n-tab-pane>
       </n-tabs>
+
+      <n-empty v-else description="发送一条开启调试的消息后，这里会展示完整检索链路。" />
     </div>
   </section>
 </template>
@@ -128,8 +129,6 @@ const sections = computed(() => store.retrievalSections);
 
 .hit-score span {
   color: var(--cp-text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   font-size: 12px;
 }
 </style>

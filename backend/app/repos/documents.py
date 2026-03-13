@@ -65,6 +65,30 @@ class DocumentRepository:
             .all()
         )
 
+    # Query chunks for a set of documents inside one knowledge base.
+    def list_chunks_by_document_ids(
+        self,
+        *,
+        user_id: str,
+        kb_id: str,
+        document_ids: list[str],
+        chunk_type: str | None = None,
+    ) -> list[DocumentChunk]:
+        if not document_ids:
+            return []
+
+        query = (
+            DocumentChunk.query.options(joinedload(DocumentChunk.document))
+            .filter(
+                DocumentChunk.user_id == user_id,
+                DocumentChunk.kb_id == kb_id,
+                DocumentChunk.document_id.in_(document_ids),
+            )
+        )
+        if chunk_type is not None:
+            query = query.filter(DocumentChunk.chunk_type == chunk_type)
+        return query.order_by(DocumentChunk.created_at.asc()).all()
+
     # Query a set of chunks by their ids, eagerly loading the parent document.
     def list_chunks_by_ids(self, chunk_ids: list[str]) -> list[DocumentChunk]:
         if not chunk_ids:

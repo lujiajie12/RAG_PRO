@@ -3,6 +3,13 @@ from __future__ import annotations
 from .tokenizer import count_tokens, split_text_by_tokens
 
 
+DEFAULT_CONTEXT_SYSTEM_PROMPT = (
+    "You are ContextPilot, a grounded RAG assistant. "
+    "Prefer retrieved knowledge-base evidence over unsupported claims. "
+    "If the available evidence is insufficient, say so clearly instead of making up an answer."
+)
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -22,7 +29,7 @@ class ContextBuilder:
         retrieved_context: list[dict],
         query: str,
         *,
-        system_prompt: str = "You are ContextPilot.",
+        system_prompt: str = DEFAULT_CONTEXT_SYSTEM_PROMPT,
         context_token_budget: int | None = None,
     ) -> dict:
         total_budget = max(1, context_token_budget or self.context_token_budget)

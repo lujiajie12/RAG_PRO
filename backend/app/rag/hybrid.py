@@ -35,8 +35,13 @@ class HybridRetriever:
         retrieval_mode: str = "hybrid",
         recall_top_k: int | None = None,
         rerank_top_k: int | None = None,
+        document_ids: list[str] | None = None,
+        document_summary_mode: bool = False,
     ) -> dict:
         child_chunks = self.repo.list_chunks_by_kb(user_id=user_id, kb_id=kb_id, chunk_type="child")
+        if document_ids:
+            scoped_ids = {str(document_id) for document_id in document_ids}
+            child_chunks = [chunk for chunk in child_chunks if str(chunk.document_id) in scoped_ids]
         if not child_chunks:
             return {
                 "query": query,
@@ -69,7 +74,18 @@ class HybridRetriever:
         rerank_hits = self.reranker.rerank(query, rerank_input, limit=rerank_limit)
         parent_candidates = self._expand_parent_context(rerank_hits)
         diverse_hits = self._select_diverse_contexts(query, parent_candidates, limit=rerank_limit)
-        final_context = [self._strip_internal_fields(hit) for hit in diverse_hits[:top_k]]
+
+        summary_contexts = []
+        if document_ids and document_summary_mode:
+            summary_contexts = self._document_summary_contexts(
+                user_id=user_id,
+                kb_id=kb_id,
+                document_ids=document_ids,
+                limit=max(top_k, min(6, rerank_limit)),
+            )
+
+        context_source = summary_contexts if summary_contexts else diverse_hits
+        final_context = [self._strip_internal_fields(hit) for hit in context_source[:top_k]]
 
         return {
             "query": query,
@@ -79,10 +95,12 @@ class HybridRetriever:
             "bm25_hits": [self._strip_internal_fields(hit) for hit in bm25_hits[:recall_limit]],
             "rrf_hits": [self._strip_internal_fields(hit) for hit in rrf_hits[:recall_limit]],
             "rerank_hits": [self._strip_internal_fields(hit) for hit in rerank_hits[:rerank_limit]],
-            "diverse_hits": [self._strip_internal_fields(hit) for hit in diverse_hits],
+            "diverse_hits": [self._strip_internal_fields(hit) for hit in context_source],
             "final_context": final_context,
             "recall_top_k": recall_limit,
             "rerank_top_k": rerank_limit,
+            "document_ids": list(document_ids or []),
+            "document_summary_mode": document_summary_mode,
         }
 
     def _vector_hits(self, query: str, chunks: list[DocumentChunk], limit: int) -> list[dict]:
@@ -101,7 +119,7 @@ class HybridRetriever:
         if not query_terms:
             return []
 
-        corpus_terms = [term_frequencies(chunk.content) for chunk in chunks]
+        corpus_terms = [self._chunk_terms(chunk) for chunk in chunks]
         document_lengths = [sum(terms.values()) or 1 for terms in corpus_terms]
         avg_document_length = sum(document_lengths) / max(1, len(document_lengths))
         document_frequency = self._document_frequency(query_terms, corpus_terms)
@@ -174,6 +192,26 @@ class HybridRetriever:
 
         return contexts
 
+    def _document_summary_contexts(
+        self,
+        *,
+        user_id: str,
+        kb_id: str,
+        document_ids: list[str],
+        limit: int,
+    ) -> list[dict]:
+        parent_chunks = self.repo.list_chunks_by_document_ids(
+            user_id=user_id,
+            kb_id=kb_id,
+            document_ids=document_ids,
+            chunk_type="parent",
+        )
+        if not parent_chunks:
+            return []
+
+        parent_chunks.sort(key=self._chunk_order_key)
+        return [self._serialize_chunk(chunk, 1.0 - index * 0.01) for index, chunk in enumerate(parent_chunks[:limit])]
+
     def _select_diverse_contexts(self, query: str, candidates: list[dict], limit: int) -> list[dict]:
         if not candidates or limit <= 0:
             return []
@@ -210,6 +248,36 @@ class HybridRetriever:
             "metadata": metadata,
             "_embedding": list(chunk.embedding) if chunk.embedding is not None else None,
         }
+
+    @staticmethod
+    def _chunk_terms(chunk: DocumentChunk) -> Counter[str]:
+        metadata = dict(chunk.metadata_json or {})
+        file_name = str(chunk.document.file_name if chunk.document else metadata.get("file_name", ""))
+        file_stem = file_name.rsplit(".", 1)[0] if "." in file_name else file_name
+        title = str(metadata.get("document_title", ""))
+        section_path = " ".join(str(part) for part in metadata.get("section_path", []))
+        searchable_text = "\n".join(
+            part
+            for part in [
+                file_name,
+                file_stem,
+                title,
+                section_path,
+                chunk.content,
+            ]
+            if part
+        )
+        return term_frequencies(searchable_text)
+
+    @staticmethod
+    def _chunk_order_key(chunk: DocumentChunk) -> tuple[int, str]:
+        metadata = dict(chunk.metadata_json or {})
+        order = metadata.get("order")
+        try:
+            numeric_order = int(order)
+        except (TypeError, ValueError):
+            numeric_order = 1_000_000
+        return numeric_order, str(chunk.created_at or "")
 
     def _mmr_score(self, query_embedding: list[float], candidate: dict, selected: list[dict]) -> float:
         relevance = max(float(candidate.get("score", 0.0)), cosine_similarity(query_embedding, candidate.get("_embedding")))

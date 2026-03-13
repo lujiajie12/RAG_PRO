@@ -1,36 +1,72 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { NButton, NInput, NTag } from "naive-ui";
 
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const store = useWorkspaceStore();
+const searchValue = ref(store.sessionSearchQuery);
+
+const retrievalModeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    hybrid: "混合检索",
+    vector: "仅向量检索",
+    bm25: "仅 BM25",
+  };
+  return labels[store.currentRetrievalMode] ?? store.currentRetrievalMode;
+});
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+function handleSearchInput(value: string) {
+  searchValue.value = value;
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+  }
+  searchTimer = setTimeout(() => {
+    void store.searchSessions(value);
+  }, 250);
+}
 </script>
 
 <template>
   <section class="rail-panel glass-card">
     <div class="rail-head">
       <div>
-        <p class="section-title">Sessions</p>
-        <h3>会话与知识库</h3>
+        <p class="section-title">会话列表</p>
+        <h3>对话与知识库</h3>
       </div>
-      <n-button tertiary type="primary" size="small">新建</n-button>
+      <n-button tertiary type="primary" size="small" @click="store.createNewSession">
+        新建
+      </n-button>
     </div>
 
-    <n-input placeholder="搜索会话、知识库或标签" round clearable />
+    <n-input
+      :value="searchValue"
+      placeholder="按标题、知识库、摘要或标签搜索"
+      round
+      clearable
+      @update:value="handleSearchInput"
+    />
 
     <div class="kb-chip-row">
-      <n-tag round :bordered="false" type="success">kb-langchain</n-tag>
-      <n-tag round :bordered="false">Hybrid Retrieval</n-tag>
-      <n-tag round :bordered="false">Parent Docs</n-tag>
+      <n-tag round :bordered="false" type="success">{{ store.selectedKnowledgeBase }}</n-tag>
+      <n-tag round :bordered="false">{{ retrievalModeLabel }}</n-tag>
+      <n-tag round :bordered="false">
+        {{ store.allowWebSearch ? "联网搜索已开启" : "联网搜索已关闭" }}
+      </n-tag>
     </div>
 
-    <div class="session-list">
+    <div v-if="store.isLoadingSessions" class="empty-state">正在加载会话...</div>
+    <div v-else-if="!store.sessions.length" class="empty-state">当前还没有会话。</div>
+
+    <div v-else class="session-list">
       <button
         v-for="session in store.sessions"
         :key="session.id"
         class="session-card"
         :class="{ active: store.selectedSessionId === session.id }"
-        @click="store.selectedSessionId = session.id"
+        @click="store.selectSession(session.id)"
       >
         <div class="session-row">
           <strong>{{ session.title }}</strong>
@@ -67,6 +103,13 @@ const store = useWorkspaceStore();
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.empty-state {
+  padding: 20px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--cp-text-soft);
 }
 
 .session-list {

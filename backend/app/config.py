@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     )
     openai_api_key: str = Field(default="replace-me", alias="OPENAI_API_KEY")
     chat_model: str = Field(default="qwen-plus", alias="CHAT_MODEL")
+    chat_execution_mode: str = Field(default="rag_llm", alias="CHAT_EXECUTION_MODE")
     embedding_model: str = Field(default="text-embedding-v4", alias="EMBEDDING_MODEL")
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANKER_MODEL")
 
@@ -88,6 +89,7 @@ class Settings(BaseSettings):
             "OPENAI_BASE_URL": self.openai_base_url,
             "OPENAI_API_KEY": self.openai_api_key,
             "CHAT_MODEL": self.chat_model,
+            "CHAT_EXECUTION_MODE": self.chat_execution_mode,
             "EMBEDDING_MODEL": self.embedding_model,
             "RERANKER_MODEL": self.reranker_model,
             "DEFAULT_USER_ID": self.default_user_id,

@@ -12,8 +12,10 @@ from ..agent import AgentRunner, is_agent_enabled
 from ..errors import APIError
 from ..models.orm import ChatAttachment, Message
 from ..models.schemas import ChatAnswer, ChatRequest, ChatStreamEnvelope, Citation, ToolTrace
+from ..rag.context_builder import DEFAULT_CONTEXT_SYSTEM_PROMPT
 from ..repos.chat_attachments import ChatAttachmentRepository
 from ..repos.sessions import MessageRepository
+from .llm_answer_service import LLMAnswerService, is_llm_enabled
 from .memory_service import MemoryService
 from .retrieval_service import RetrievalService
 from .session_service import SessionService
@@ -68,6 +70,7 @@ class ChatService:
         try:
             history_messages = self.message_repo.list_by_session(session.id)
             prior_history = history_messages[:-1] if history_messages else []
+            memories = [memory.model_dump(mode="json") for memory in self.memory_service.list_memories(payload.user_id)]
             retrieval_result = self._retrieve_context(
                 payload,
                 session.kb_id,
@@ -75,17 +78,7 @@ class ChatService:
                 session.retrieval_mode,
                 prior_history,
             )
-            answer_text, agent_tool_traces = self._generate_answer(
-                query=payload.message,
-                user_id=payload.user_id,
-                kb_id=session.kb_id,
-                history=prior_history,
-                memories=[memory.model_dump(mode="json") for memory in self.memory_service.list_memories(payload.user_id)],
-                contexts=retrieval_result["final_context"],
-                attachment_count=len(prepared.attachments),
-                retrieval_mode=session.retrieval_mode,
-                web_search_enabled=session.web_search_enabled,
-            )
+
             retrieval_tool_trace = ToolTrace(
                 name="rag_search",
                 status="completed",
@@ -109,21 +102,27 @@ class ChatService:
                     "web_search": "not_implemented" if session.web_search_enabled else "disabled",
                 },
             )
-            tool_traces = [retrieval_tool_trace, *agent_tool_traces]
             citations = self._build_citations(retrieval_result["final_context"])
 
-            for trace in tool_traces:
-                yield self._to_sse(ChatStreamEnvelope(event="tool_call", data=trace.model_dump(mode="json")))
-
-            for token in self._chunk_text(answer_text):
-                yield self._to_sse(ChatStreamEnvelope(event="token", data={"text": token}))
+            yield self._to_sse(ChatStreamEnvelope(event="tool_call", data=retrieval_tool_trace.model_dump(mode="json")))
 
             if payload.debug and session.kb_id:
-                debug_payload = self.retrieval_service.build_debug_response(
-                    payload.message,
-                    retrieval_result,
-                )
+                debug_payload = self.retrieval_service.build_debug_response(payload.message, retrieval_result)
                 yield self._to_sse(ChatStreamEnvelope(event="retrieval_debug", data=debug_payload.model_dump(mode="json")))
+
+            answer_text, additional_tool_traces = yield from self._stream_answer(
+                query=payload.message,
+                user_id=payload.user_id,
+                kb_id=session.kb_id,
+                history=prior_history,
+                memories=memories,
+                contexts=retrieval_result["final_context"],
+                context_plan=retrieval_result["context_plan"],
+                attachment_count=len(prepared.attachments),
+                retrieval_mode=session.retrieval_mode,
+                web_search_enabled=session.web_search_enabled,
+            )
+            tool_traces = [retrieval_tool_trace, *additional_tool_traces]
 
             assistant_message = Message(
                 session_id=session.id,
@@ -186,7 +185,20 @@ class ChatService:
                 "rerank_hits": [],
                 "diverse_hits": [],
                 "final_context": [],
-                "context_plan": {"system_prompt": "You are ContextPilot.", "history": [], "memories": [], "retrieved_context": [], "query": payload.message, "token_budget": current_app.config.get("CONTEXT_TOKEN_BUDGET", 2400), "token_usage": {"history": 0, "memory": 0, "retrieved_context": 0, "remaining": current_app.config.get("CONTEXT_TOKEN_BUDGET", 2400)}},
+                "context_plan": {
+                    "system_prompt": DEFAULT_CONTEXT_SYSTEM_PROMPT,
+                    "history": [],
+                    "memories": [],
+                    "retrieved_context": [],
+                    "query": payload.message,
+                    "token_budget": current_app.config.get("CONTEXT_TOKEN_BUDGET", 2400),
+                    "token_usage": {
+                        "history": 0,
+                        "memory": 0,
+                        "retrieved_context": 0,
+                        "remaining": current_app.config.get("CONTEXT_TOKEN_BUDGET", 2400),
+                    },
+                },
                 "prompt_budget": {
                     "system": 600,
                     "history": 0,
@@ -208,7 +220,113 @@ class ChatService:
             memories=[memory.model_dump(mode="json") for memory in self.memory_service.list_memories(payload.user_id)],
         )
 
-    def _generate_answer(
+    def _stream_answer(
+        self,
+        *,
+        query: str,
+        user_id: str,
+        kb_id: str | None,
+        history: list[Message],
+        memories: list[dict],
+        contexts: list[dict],
+        context_plan: dict[str, Any],
+        attachment_count: int,
+        retrieval_mode: str,
+        web_search_enabled: bool,
+    ) -> Generator[str, None, tuple[str, list[ToolTrace]]]:
+        execution_mode = str(current_app.config.get("CHAT_EXECUTION_MODE", "rag_llm")).strip().lower()
+        prefer_agent = execution_mode in {"agent", "agent_first"}
+
+        if prefer_agent and is_agent_enabled(current_app.config):
+            agent_answer = self._try_agent_answer(
+                query=query,
+                user_id=user_id,
+                kb_id=kb_id,
+                history=history,
+                memories=memories,
+                contexts=contexts,
+                attachment_count=attachment_count,
+                retrieval_mode=retrieval_mode,
+                web_search_enabled=web_search_enabled,
+            )
+            if agent_answer is not None:
+                return (yield from self._emit_non_streaming_answer(*agent_answer))
+
+        streamed_llm_answer = yield from self._try_stream_llm_answer(
+            query=query,
+            user_id=user_id,
+            kb_id=kb_id,
+            context_plan=context_plan,
+            attachment_count=attachment_count,
+            retrieval_mode=retrieval_mode,
+            web_search_enabled=web_search_enabled,
+        )
+        if streamed_llm_answer is not None:
+            return streamed_llm_answer
+
+        if not prefer_agent and is_agent_enabled(current_app.config):
+            agent_answer = self._try_agent_answer(
+                query=query,
+                user_id=user_id,
+                kb_id=kb_id,
+                history=history,
+                memories=memories,
+                contexts=contexts,
+                attachment_count=attachment_count,
+                retrieval_mode=retrieval_mode,
+                web_search_enabled=web_search_enabled,
+            )
+            if agent_answer is not None:
+                return (yield from self._emit_non_streaming_answer(*agent_answer))
+
+        fallback_answer = self._build_fallback_answer(query=query, contexts=contexts, attachment_count=attachment_count)
+        return (yield from self._emit_non_streaming_answer(fallback_answer, []))
+
+    def _try_stream_llm_answer(
+        self,
+        *,
+        query: str,
+        user_id: str,
+        kb_id: str | None,
+        context_plan: dict[str, Any],
+        attachment_count: int,
+        retrieval_mode: str,
+        web_search_enabled: bool,
+    ) -> Generator[str, None, tuple[str, list[ToolTrace]] | None]:
+        if not is_llm_enabled(current_app.config):
+            return None
+
+        try:
+            llm_service = LLMAnswerService(current_app.config)
+            answer_parts: list[str] = []
+            for token in llm_service.stream_answer(
+                query=query,
+                user_id=user_id,
+                kb_id=kb_id,
+                retrieval_mode=retrieval_mode,
+                web_search_enabled=web_search_enabled,
+                context_plan=context_plan,
+            ):
+                if not token:
+                    continue
+                answer_parts.append(token)
+                yield self._to_sse(ChatStreamEnvelope(event="token", data={"text": token}))
+
+            answer_text = "".join(answer_parts).strip()
+            if not answer_text:
+                return None
+
+            attachment_note = self._attachment_note(attachment_count)
+            if attachment_note:
+                for token in self._chunk_text(attachment_note):
+                    yield self._to_sse(ChatStreamEnvelope(event="token", data={"text": token}))
+                answer_text = f"{answer_text}{attachment_note}"
+
+            return answer_text, []
+        except Exception:
+            return None
+
+    def _try_agent_answer(
         self,
         *,
         query: str,
@@ -220,43 +338,54 @@ class ChatService:
         attachment_count: int,
         retrieval_mode: str,
         web_search_enabled: bool,
-    ) -> tuple[str, list[ToolTrace]]:
-        if is_agent_enabled(current_app.config):
-            try:
-                runner = AgentRunner(current_app.config)
-                agent_result = runner.invoke(
-                    {
-                        "query": query,
-                        "user_id": user_id,
-                        "kb_id": kb_id,
-                        "history": [{"role": message.role, "content": message.content} for message in history],
-                        "memories": memories,
-                        "retrieved_context": contexts,
-                        "retrieval_mode": retrieval_mode,
-                        "web_search_enabled": web_search_enabled,
-                    }
-                )
-                answer_text = str(agent_result.get("answer", "")).strip()
-                if answer_text:
-                    if attachment_count:
-                        answer_text += (
-                            f" {attachment_count} chat attachment(s) were received for this session. "
-                            "They are stored and associated with the message, but they are not indexed into the knowledge base yet."
-                        )
-                    traces = [
-                        ToolTrace(
-                            name=str(item.get("name", "tool")),
-                            status=item.get("status", "completed"),
-                            input=dict(item.get("input", {})),
-                            output=dict(item.get("output", {})),
-                        )
-                        for item in agent_result.get("tool_trace", [])
-                    ]
-                    return answer_text, traces
-            except Exception:
-                pass
+    ) -> tuple[str, list[ToolTrace]] | None:
+        try:
+            runner = AgentRunner(current_app.config)
+            agent_result = runner.invoke(
+                {
+                    "query": query,
+                    "user_id": user_id,
+                    "kb_id": kb_id,
+                    "history": [{"role": message.role, "content": message.content} for message in history],
+                    "memories": memories,
+                    "retrieved_context": contexts,
+                    "retrieval_mode": retrieval_mode,
+                    "web_search_enabled": web_search_enabled,
+                }
+            )
+            answer_text = str(agent_result.get("answer", "")).strip()
+            if not answer_text:
+                return None
 
-        return self._build_fallback_answer(query=query, contexts=contexts, attachment_count=attachment_count), []
+            attachment_note = self._attachment_note(attachment_count)
+            if attachment_note:
+                answer_text = f"{answer_text}{attachment_note}"
+
+            traces = [
+                ToolTrace(
+                    name=str(item.get("name", "tool")),
+                    status=item.get("status", "completed"),
+                    input=dict(item.get("input", {})),
+                    output=dict(item.get("output", {})),
+                )
+                for item in agent_result.get("tool_trace", [])
+            ]
+            return answer_text, traces
+        except Exception:
+            return None
+
+    def _emit_non_streaming_answer(
+        self,
+        answer_text: str,
+        tool_traces: list[ToolTrace],
+    ) -> Generator[str, None, tuple[str, list[ToolTrace]]]:
+        for trace in tool_traces:
+            yield self._to_sse(ChatStreamEnvelope(event="tool_call", data=trace.model_dump(mode="json")))
+
+        for token in self._chunk_text(answer_text):
+            yield self._to_sse(ChatStreamEnvelope(event="token", data={"text": token}))
+
+        return answer_text, tool_traces
 
     def _build_fallback_answer(self, *, query: str, contexts: list[dict], attachment_count: int) -> str:
         if not contexts:
@@ -272,11 +401,9 @@ class ChatService:
                 + " ".join(line for line in evidence_lines if line)
             ).strip()
 
-        if attachment_count:
-            answer += (
-                f" {attachment_count} chat attachment(s) were received for this session. "
-                "They are stored and associated with the message, but they are not indexed into the knowledge base yet."
-            )
+        attachment_note = self._attachment_note(attachment_count)
+        if attachment_note:
+            answer = f"{answer}{attachment_note}"
         return answer
 
     @staticmethod
@@ -314,3 +441,12 @@ class ChatService:
                 )
             )
         return citations
+
+    @staticmethod
+    def _attachment_note(attachment_count: int) -> str:
+        if not attachment_count:
+            return ""
+        return (
+            f" {attachment_count} chat attachment(s) were received for this session. "
+            "They are stored and associated with the message, but they are not indexed into the knowledge base yet."
+        )

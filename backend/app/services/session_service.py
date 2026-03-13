@@ -6,9 +6,9 @@ from uuid import uuid4
 from flask import current_app
 
 from ..errors import APIError
-from ..models.orm import ConversationSession, SessionTag
-from ..models.schemas import CreateSessionRequest, SessionRecord, UpdateSessionRequest
-from ..repos.sessions import SessionRepository
+from ..models.orm import ConversationSession, Message, SessionTag
+from ..models.schemas import CreateSessionRequest, MessageRecord, SessionRecord, UpdateSessionRequest
+from ..repos.sessions import MessageRepository, SessionRepository
 
 
 def _normalize_tags(tags: list[str]) -> list[str]:
@@ -25,8 +25,13 @@ def _summarize(text: str) -> str:
 
 
 class SessionService:
-    def __init__(self, repo: SessionRepository | None = None) -> None:
+    def __init__(
+        self,
+        repo: SessionRepository | None = None,
+        message_repo: MessageRepository | None = None,
+    ) -> None:
         self.repo = repo or SessionRepository()
+        self.message_repo = message_repo or MessageRepository()
 
     def list_sessions(
         self,
@@ -94,6 +99,11 @@ class SessionService:
 
         return self._to_record(self.repo.update(session))
 
+    def list_messages(self, user_id: str, session_id: str) -> list[MessageRecord]:
+        session = self.get_session_entity(user_id, session_id)
+        messages = self.message_repo.list_by_session(session.id)
+        return [self._to_message_record(message) for message in messages]
+
     def touch_after_user_message(self, session: ConversationSession, user_text: str, when: datetime) -> ConversationSession:
         session.summary = _summarize(user_text)
         session.last_message_at = when
@@ -125,4 +135,17 @@ class SessionService:
             last_message_at=session.last_message_at,
             created_at=session.created_at,
             updated_at=session.updated_at,
+        )
+
+    @staticmethod
+    def _to_message_record(message: Message) -> MessageRecord:
+        return MessageRecord(
+            id=message.id,
+            session_id=message.session_id,
+            role=message.role,
+            content=message.content,
+            citations=message.citations or [],
+            tool_trace=message.tool_trace or [],
+            created_at=message.created_at,
+            updated_at=message.updated_at,
         )

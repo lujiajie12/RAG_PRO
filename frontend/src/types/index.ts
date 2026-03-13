@@ -1,12 +1,19 @@
 export interface SessionItem {
   id: string;
-  title: string;
+  userId: string;
   kbId: string;
-  updatedAt: string;
+  title: string;
   summary: string;
+  updatedAt: string;
+  tags: string[];
+  modelName: string;
+  retrievalMode: "hybrid" | "vector" | "bm25";
+  webSearchEnabled: boolean;
 }
 
 export interface CitationItem {
+  documentId: string;
+  chunkId: string;
   fileName: string;
   page?: number;
   rerankScore?: number;
@@ -23,9 +30,10 @@ export interface MessageItem {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  citations?: CitationItem[];
-  toolTrace?: ToolTraceItem[];
+  citations: CitationItem[];
+  toolTrace: ToolTraceItem[];
   streaming?: boolean;
+  failed?: boolean;
 }
 
 export interface RetrievalHit {
@@ -42,8 +50,17 @@ export interface RetrievalPanelSection {
   hits: RetrievalHit[];
 }
 
+export interface PromptBudgetSummary {
+  used: number;
+  budget: number;
+  history: number;
+  memory: number;
+  userQuery: number;
+}
+
 export interface KnowledgeDocument {
   id: string;
+  kbId: string;
   name: string;
   type: string;
   chunkCount: number;

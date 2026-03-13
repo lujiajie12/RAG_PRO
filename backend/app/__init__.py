@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Flask
+from flask import Flask, jsonify
 from pydantic import ValidationError
 
 from .api import register_blueprints
@@ -18,20 +18,30 @@ def create_app() -> Flask:
     register_blueprints(app)
 
     @app.errorhandler(APIError)
-    def handle_api_error(error: APIError):
-        return {
-            "error": error.error,
-            "code": error.code,
-            "details": error.details,
-        }, error.status_code
+    def handle_api_error(exc: APIError):
+        return (
+            jsonify(
+                {
+                    "error": exc.error,
+                    "code": exc.code,
+                    "details": exc.details,
+                }
+            ),
+            exc.status_code,
+        )
 
     @app.errorhandler(ValidationError)
-    def handle_validation_error(error: ValidationError):
-        return {
-            "error": "request validation failed",
-            "code": "validation_error",
-            "details": {"errors": error.errors(include_url=False)},
-        }, 400
+    def handle_validation_error(exc: ValidationError):
+        return (
+            jsonify(
+                {
+                    "error": "request validation failed",
+                    "code": "validation_error",
+                    "details": {"errors": exc.errors()},
+                }
+            ),
+            400,
+        )
 
     @app.get("/")
     def root() -> dict[str, str]:

@@ -108,7 +108,7 @@ def test_stream_chat_persists_messages_and_updates_session(client, app, test_use
         messages = Message.query.filter_by(session_id=session_id).order_by(Message.created_at.asc()).all()
         assert [message.role for message in messages] == ["user", "assistant"]
         assert messages[0].content == "What is parent document retrieval?"
-        assert "broader parent context" in messages[1].content
+        assert "parent document retrieval" in messages[1].content.lower()
         assert messages[1].citations
         assert messages[1].citations[0]["file_name"] == "retrieval-notes.txt"
 
@@ -153,6 +153,50 @@ def test_stream_chat_rejects_attachment_from_other_session(client, app, test_use
     assert "attachments" in payload["error"]
 
 
+def test_stream_chat_uses_true_llm_stream_chunks(client, app, monkeypatch, test_user_id):
+    class FakeLLMAnswerService:
+        def __init__(self, _: dict) -> None:
+            pass
+
+        def stream_answer(self, **kwargs):
+            yield "A"
+            yield "BC"
+
+        def generate_answer(self, **kwargs):
+            raise AssertionError("generate_answer should not be called in streaming mode")
+
+    monkeypatch.setattr(chat_service_module, "is_llm_enabled", lambda _: True)
+    monkeypatch.setattr(chat_service_module, "is_agent_enabled", lambda _: False)
+    monkeypatch.setattr(chat_service_module, "LLMAnswerService", FakeLLMAnswerService)
+
+    with app.app_context():
+        session = _seed_session(test_user_id)
+        _seed_indexed_document(test_user_id, session.kb_id or "kb-chat")
+        session_id = session.id
+
+    response = client.post(
+        "/api/chat/stream",
+        json={
+            "user_id": test_user_id,
+            "session_id": session_id,
+            "message": "What is parent document retrieval?",
+            "debug": True,
+        },
+        buffered=True,
+    )
+
+    assert response.status_code == 200
+    payload = response.get_data(as_text=True)
+    assert 'event: token\ndata: {"text": "A"}' in payload
+    assert 'event: token\ndata: {"text": "BC"}' in payload
+    assert 'event: token\ndata: {"text": "ABC"}' not in payload
+    assert '"answer": "ABC"' in payload
+
+    with app.app_context():
+        messages = Message.query.filter_by(session_id=session_id).order_by(Message.created_at.asc()).all()
+        assert messages[-1].content == "ABC"
+
+
 def test_stream_chat_uses_agent_answer_when_enabled(client, app, monkeypatch, test_user_id):
     class FakeAgentRunner:
         def __init__(self, _: dict) -> None:
@@ -176,6 +220,7 @@ def test_stream_chat_uses_agent_answer_when_enabled(client, app, monkeypatch, te
     monkeypatch.setattr(chat_service_module, "AgentRunner", FakeAgentRunner)
 
     with app.app_context():
+        app.config["CHAT_EXECUTION_MODE"] = "agent_first"
         session = _seed_session(test_user_id)
         _seed_indexed_document(test_user_id, session.kb_id or "kb-chat")
         session_id = session.id

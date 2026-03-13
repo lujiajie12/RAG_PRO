@@ -1,11 +1,6 @@
 <script setup lang="ts">
-import {
-  NButton,
-  NInput,
-  NSelect,
-  NSwitch,
-  NTag,
-} from "naive-ui";
+import { computed, onMounted, ref } from "vue";
+import { NAlert, NButton, NEmpty, NInput, NSelect, NSwitch, NTag } from "naive-ui";
 
 import DebugPanel from "@/components/chat/DebugPanel.vue";
 import MessageBubble from "@/components/chat/MessageBubble.vue";
@@ -13,6 +8,9 @@ import SessionRail from "@/components/chat/SessionRail.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const store = useWorkspaceStore();
+const draft = ref("");
+const attachmentFiles = ref<File[]>([]);
+const attachmentInput = ref<HTMLInputElement | null>(null);
 
 const modelOptions = [
   { label: "qwen-plus", value: "qwen-plus" },
@@ -21,10 +19,48 @@ const modelOptions = [
 ];
 
 const retrievalOptions = [
-  { label: "Hybrid Retrieval", value: "hybrid" },
-  { label: "Vector Only", value: "vector" },
-  { label: "BM25 Only", value: "bm25" },
+  { label: "混合检索", value: "hybrid" },
+  { label: "仅向量检索", value: "vector" },
+  { label: "仅 BM25", value: "bm25" },
 ];
+
+const canSend = computed(() => Boolean(store.currentSession) && !store.isSendingMessage);
+
+const retrievalModeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    hybrid: "混合检索",
+    vector: "仅向量检索",
+    bm25: "仅 BM25",
+  };
+  return labels[store.currentRetrievalMode] ?? store.currentRetrievalMode;
+});
+
+function openAttachmentPicker() {
+  attachmentInput.value?.click();
+}
+
+function handleAttachmentSelection(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const files = Array.from(target.files ?? []);
+  target.value = "";
+  attachmentFiles.value = [...attachmentFiles.value, ...files];
+}
+
+function removeAttachment(fileName: string) {
+  attachmentFiles.value = attachmentFiles.value.filter((file) => file.name !== fileName);
+}
+
+async function handleSend() {
+  const success = await store.sendMessage(draft.value, attachmentFiles.value);
+  if (success) {
+    draft.value = "";
+    attachmentFiles.value = [];
+  }
+}
+
+onMounted(() => {
+  void store.ensureInitialized().catch(() => undefined);
+});
 </script>
 
 <template>
@@ -34,57 +70,87 @@ const retrievalOptions = [
     <section class="chat-stage glass-card">
       <header class="chat-toolbar">
         <div>
-          <p class="section-title">Chat Workspace</p>
-          <h2>{{ store.currentSession.title }}</h2>
+          <p class="section-title">对话工作台</p>
+          <h2>{{ store.currentSession?.title ?? "正在加载会话..." }}</h2>
         </div>
         <div class="toolbar-controls">
-          <n-select :options="modelOptions" value="qwen-plus" class="toolbar-select" />
-          <n-select :options="retrievalOptions" value="hybrid" class="toolbar-select" />
+          <n-select v-model:value="store.currentModel" :options="modelOptions" class="toolbar-select" />
+          <n-select v-model:value="store.currentRetrievalMode" :options="retrievalOptions" class="toolbar-select" />
           <div class="toolbar-switch">
-            <span>Web Search</span>
+            <span>联网搜索</span>
             <n-switch v-model:value="store.allowWebSearch" />
           </div>
         </div>
       </header>
 
+      <n-alert v-if="store.lastError" type="error" :show-icon="false">
+        {{ store.lastError }}
+      </n-alert>
+
       <div class="signal-strip">
         <div class="signal-card">
-          <span class="muted">Active KB</span>
+          <span class="muted">当前知识库</span>
           <strong>{{ store.selectedKnowledgeBase }}</strong>
         </div>
         <div class="signal-card">
-          <span class="muted">Memory State</span>
-          <strong>1 preference + 1 task recalled</strong>
+          <span class="muted">记忆状态</span>
+          <strong>{{ store.memoryStateSummary }}</strong>
         </div>
         <div class="signal-card">
-          <span class="muted">Context Budget</span>
-          <strong class="mono">2400 / 6000 tokens</strong>
+          <span class="muted">上下文预算</span>
+          <strong class="mono">{{ store.contextBudgetLabel }}</strong>
         </div>
       </div>
 
-      <div class="message-flow">
+      <div v-if="store.isInitializing" class="message-flow empty-panel">
+        正在初始化工作台...
+      </div>
+      <div v-else-if="!store.messages.length" class="message-flow empty-panel">
+        <n-empty description="输入一个问题，开始与知识库进行对话。" />
+      </div>
+      <div v-else class="message-flow">
         <MessageBubble v-for="message in store.messages" :key="message.id" :message="message" />
       </div>
 
       <footer class="composer glass-card">
         <div class="composer-hints">
-          <n-tag round :bordered="false" type="success">RAG ready</n-tag>
-          <n-tag round :bordered="false">Agent tool calling</n-tag>
-          <n-tag round :bordered="false">Long-term memory</n-tag>
+          <n-tag round :bordered="false" type="success">RAG 已就绪</n-tag>
+          <n-tag round :bordered="false">{{ retrievalModeLabel }}</n-tag>
+          <n-tag round :bordered="false">{{ store.allowWebSearch ? "联网搜索已开启" : "联网搜索已关闭" }}</n-tag>
         </div>
+
+        <div v-if="attachmentFiles.length" class="attachment-row">
+          <button
+            v-for="file in attachmentFiles"
+            :key="file.name"
+            class="attachment-chip"
+            type="button"
+            @click="removeAttachment(file.name)"
+          >
+            {{ file.name }} ×
+          </button>
+        </div>
+
         <n-input
+          v-model:value="draft"
           type="textarea"
           round
-          placeholder="输入你的问题，或要求记住你的偏好。"
+          placeholder="请输入你的问题。系统会流式返回回答、引用来源和检索调试信息。"
           :autosize="{ minRows: 4, maxRows: 6 }"
+          @keydown.enter.exact.prevent="handleSend"
         />
         <div class="composer-actions">
-          <div class="muted">支持文档问答、偏好记忆、多轮上下文和检索调试联动。</div>
+          <div class="muted">
+            你可以为当前问题附加文件，查看流式回答，并在右侧调试面板中检查检索到的上下文。
+          </div>
           <div class="button-row">
-            <n-button tertiary>上传附件</n-button>
-            <n-button type="primary">发送消息</n-button>
+            <n-button tertiary @click="openAttachmentPicker">添加附件</n-button>
+            <n-button type="primary" :loading="store.isSendingMessage" :disabled="!canSend" @click="handleSend">
+              发送
+            </n-button>
           </div>
         </div>
+        <input ref="attachmentInput" class="hidden-input" type="file" multiple @change="handleAttachmentSelection" />
       </footer>
     </section>
 
@@ -95,7 +161,7 @@ const retrievalOptions = [
 <style scoped>
 .workspace-grid {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 380px;
+  grid-template-columns: 340px minmax(0, 1fr) 380px;
   gap: 18px;
 }
 
@@ -171,6 +237,11 @@ const retrievalOptions = [
   padding: 4px;
 }
 
+.empty-panel {
+  display: grid;
+  place-items: center;
+}
+
 .composer {
   display: flex;
   flex-direction: column;
@@ -180,15 +251,28 @@ const retrievalOptions = [
 }
 
 .composer-hints,
-.button-row {
+.button-row,
+.attachment-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
+.attachment-chip {
+  border: 1px solid rgba(66, 84, 108, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.hidden-input {
+  display: none;
+}
+
 @media (max-width: 1400px) {
   .workspace-grid {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 320px minmax(0, 1fr);
   }
 }
 

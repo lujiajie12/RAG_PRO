@@ -6,9 +6,9 @@ import { NAvatar, NBadge, NButton, NTag } from "naive-ui";
 const route = useRoute();
 
 const navItems = [
-  { to: "/workspace", label: "Chat", short: "CP" },
-  { to: "/knowledge", label: "KB", short: "KB" },
-  { to: "/memory", label: "Mem", short: "MM" },
+  { to: "/workspace", label: "对话工作台", short: "对话" },
+  { to: "/knowledge", label: "知识库", short: "知识" },
+  { to: "/memory", label: "记忆中心", short: "记忆" },
 ];
 
 const activePath = computed(() => route.path);
@@ -21,7 +21,7 @@ const activePath = computed(() => route.path);
         <div class="brand-mark">CP</div>
         <div class="brand-copy">
           <strong>ContextPilot</strong>
-          <span>Knowledge Workspace</span>
+          <span>知识工作台</span>
         </div>
       </div>
 
@@ -42,25 +42,25 @@ const activePath = computed(() => route.path);
         <n-badge dot color="#0f766e">
           <n-avatar round size="large">AI</n-avatar>
         </n-badge>
-        <n-tag round size="small" type="success" :bordered="false">Ready</n-tag>
-        <n-button secondary type="primary" size="small">Docs</n-button>
+        <n-tag round size="small" type="success" :bordered="false">运行中</n-tag>
+        <n-button secondary type="primary" size="small">文档</n-button>
       </div>
     </aside>
 
     <main class="shell-main">
       <header class="shell-header glass-card">
         <div>
-          <p class="section-title">AI Engineering Playground</p>
+          <p class="section-title">AI 应用工程练手项目</p>
           <h1>RAG + Agent + Memory 知识工作台</h1>
         </div>
         <div class="header-summary">
           <div>
-            <span class="muted">Current stack</span>
+            <span class="muted">当前技术栈</span>
             <strong>Vue 3 + Flask + LangChain 1.2</strong>
           </div>
           <div>
-            <span class="muted">Mode</span>
-            <strong>Professional Workspace</strong>
+            <span class="muted">当前模式</span>
+            <strong>专业知识工作台</strong>
           </div>
         </div>
       </header>
@@ -77,7 +77,7 @@ const activePath = computed(() => route.path);
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 22px 16px;
+  padding: 22px 18px;
   border-right: 1px solid rgba(57, 73, 94, 0.08);
   background: linear-gradient(180deg, rgba(245, 249, 250, 0.78) 0%, rgba(237, 243, 246, 0.62) 100%);
 }
@@ -93,7 +93,7 @@ const activePath = computed(() => route.path);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 18px 14px;
+  padding: 18px 16px;
 }
 
 .brand-mark {
@@ -117,25 +117,27 @@ const activePath = computed(() => route.path);
 
 .brand-copy strong {
   color: var(--cp-text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .nav-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 12px 10px;
 }
 
 .nav-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
   justify-content: center;
-  min-height: 72px;
+  min-height: 84px;
+  padding: 8px 6px;
   border-radius: 22px;
   color: var(--cp-text-muted);
+  text-align: center;
   transition: 180ms ease;
 }
 
@@ -148,10 +150,11 @@ const activePath = computed(() => route.path);
 
 .nav-item span {
   font-weight: 700;
+  font-size: 14px;
 }
 
 .nav-item small {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .rail-footer {
@@ -226,8 +229,8 @@ const activePath = computed(() => route.path);
   }
 
   .nav-item {
-    min-width: 84px;
-    min-height: 64px;
+    min-width: 108px;
+    min-height: 70px;
   }
 
   .rail-footer {
@@ -255,10 +258,6 @@ const activePath = computed(() => route.path);
 
   .shell-header h1 {
     font-size: 22px;
-  }
-
-  .brand-copy {
-    display: none;
   }
 }
 </style>

@@ -32,7 +32,7 @@ class DocumentService:
         self.storage = storage
 
     def list_documents(self, user_id: str, kb_id: str) -> list[DocumentSummary]:
-        return [DocumentSummary.model_validate(item) for item in self.repo.list_by_kb(user_id, kb_id)]
+        return [self._to_summary(item) for item in self.repo.list_by_kb(user_id, kb_id)]
 
     def upload_document(self, user_id: str, kb_id: str, file: FileStorage) -> DocumentUploadResponse:
         file_name = Path(file.filename or "untitled").name
@@ -93,6 +93,28 @@ class DocumentService:
             pass
         self.repo.delete(document)
         return True
+
+    @staticmethod
+    def _to_summary(document: Document) -> DocumentSummary:
+        metadata = dict(document.metadata_json or {})
+        indexing = dict(metadata.get("indexing") or {})
+        return DocumentSummary(
+            id=document.id,
+            user_id=document.user_id,
+            kb_id=document.kb_id,
+            file_name=document.file_name,
+            file_type=document.file_type,
+            status=document.status,
+            parsed_type=document.parsed_type,
+            chunk_count=document.chunk_count,
+            parent_count=int(metadata.get("parent_chunk_count") or indexing.get("parent_chunks") or 0),
+            child_count=int(metadata.get("child_chunk_count") or indexing.get("child_chunks") or document.chunk_count or 0),
+            indexed_at=document.updated_at if document.status == "indexed" else None,
+            embedding_status=str(indexing.get("vector") or "pending"),
+            bm25_status=str(indexing.get("bm25") or "pending"),
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+        )
 
     @staticmethod
     def _build_storage() -> ObjectStorage:

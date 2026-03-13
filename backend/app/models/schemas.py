@@ -47,6 +47,17 @@ class SessionRecord(APIModel):
     updated_at: datetime
 
 
+class MessageRecord(APIModel):
+    id: str
+    session_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    citations: list[Citation] = Field(default_factory=list)
+    tool_trace: list[ToolTrace] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class CreateSessionRequest(APIModel):
     user_id: str = Field(min_length=1)
     kb_id: str | None = None
@@ -85,6 +96,11 @@ class DocumentSummary(APIModel):
     status: str
     parsed_type: str
     chunk_count: int
+    parent_count: int = 0
+    child_count: int = 0
+    indexed_at: datetime | None = None
+    embedding_status: str = "pending"
+    bm25_status: str = "pending"
     created_at: datetime
     updated_at: datetime
 
